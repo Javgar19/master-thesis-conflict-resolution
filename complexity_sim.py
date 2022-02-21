@@ -53,41 +53,50 @@ def create_sources(center, radius, n_sources):
 
 	return sources_positions
 
-def spawn_acs(traf, sources_position, radius, center):
+def init_at(radius, center, n_ac):
 
-	alpha = np.linspace(0, 2*np.pi, 1000)
-	y = radius * np.sin(alpha)
-	x = radius * np.cos(alpha)
 	earth_radius = geo.rwgs84(center[0])/1852
 
-	lats = center[0] + 180/np.pi * y/earth_radius
-	lons = center[1] + 180/np.pi * x/earth_radius
+	for _ in range(n_ac):
 
-	bound_coordinates = [[lat, lon] for lat, lon in zip(lats, lons)]
+		random_angle = random.random() * 2 * np.pi
+		random_distance = random.random()
 
-	for i, source in enumerate(sources_position):
+		random_lat = center[0] +  180/np.pi * random_distance * np.sin(random_angle) / earth_radius 
+		random_lon = center[1] +  180/np.pi * random_distance * np.cos(random_angle) / earth_radius
 
-		random_point = random.choice(bound_coordinates)
-		while geo.latlondist(random_point[0], random_point[1], source[0], source[1]) < radius *1852:
-			random_point = random.choice(bound_coordinates)
+
+		angle = geo.qdrdist(random_lat, random_lon, center[0], center[1])[0]
+		limit_angle = 60.0 # 60deg when the sources are in the np
 
 		acid = str(random.getrandbits(32))
-		
-		heading = geo.qdrdist(source[0], source[1], random_point[0], random_point[1])[0]
+		heading = random.uniform(angle - limit_angle, angle + limit_angle)
 
-		traf.cre(acid, actype="M200", aclat=source[0], aclon=source[1], acspd=40, achdg=heading)
+		bs.traf.cre(acid, actype="M200", aclat=random_lat, aclon=random_lon, acspd=40, achdg=heading)
 
-		#print(random_point[0], random_point[1])
 
 		#wpname = "wp" + acid
 		#bs.stack.stack('DEST {0} {1} {2} {3}'.format(acid, wpname, random_point[0], random_point[1]))
 		#print(random_point, acid)
 		#Route.addwpt(iac = acid, name = acid, wptype = "DEST", lat = random_point[0], lon = random_point[1])
 
+def spawn_ac(sources_position, radius, center, number_of_aircrafts):
+
+	for _ in range(number_of_aircrafts):
+		source = random.choice(sources_position)
+		angle = geo.qdrdist(source[0], source[1], center[0], center[1])[0]
+		limit_angle = 60.0 * 180 / np.pi
+
+		acid = str(random.getrandbits(32))
+		heading = random.uniform(angle - limit_angle, angle + limit_angle)
+
+		bs.traf.cre(acid, actype="M200", aclat=source[0], aclon=source[1], acspd=40, achdg=heading)
+
 
 def plot_at(center, radius, sources_position):
 
 	alpha = np.linspace(0, 2*np.pi, 1000)
+
 	ybound = radius * np.sin(alpha)
 	xbound = radius * np.cos(alpha)
 	earth_radius = geo.rwgs84(center[0])/1852
@@ -107,7 +116,7 @@ def plot_at(center, radius, sources_position):
 	plt.show()
 
 
-def complexity_simulation(ScreenDummy, center, radius, sim_time, n_sources, ac_freq):
+def complexity_simulation(ScreenDummy, center, radius, n_ac, sim_time, n_sources):
 	# Initialize global settings
 	settings.init("")
 	# Manually set the performance model to the one defined in the settings before
@@ -137,6 +146,8 @@ def complexity_simulation(ScreenDummy, center, radius, sim_time, n_sources, ac_f
 	t = np.linspace(0, t_max, n_steps)
 
 	sources_position = create_sources(center, radius, n_sources)
+	init_at(radius, center, n_ac)
+	plot_at(center, radius, sources_position)
 	
 	logger = Logger("lat", "lon", "alt", dt = 10, name = "COMP_LOGGER")
 	
@@ -150,20 +161,21 @@ def complexity_simulation(ScreenDummy, center, radius, sim_time, n_sources, ac_f
 		check_boundaries(traf, center, radius)
 
 		""" Spawning aircrafts in the sources """
-		if bs.sim.simt % ac_freq == 0:
-			spawn_acs(traf, sources_position, radius, center)
+		if bs.traf.ntraf < n_ac:
+			spawn_ac(sources_position, radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
 
 
 		bs.sim.simt += bs.sim.simdt
 
 		traf.update()
-		#plot_at(center, radius, sources_position)
 		
+		if bs.traf.ntraf != 100:
+			print(bs.traf.ntraf)
 
 	logger.stop()
 	del logger
 
 if __name__ == '__main__':
-	complexity_simulation(ScreenDummy, (47, 9), 1, 15 * 60, 100, 10)
+	complexity_simulation(ScreenDummy, center=(47, 9), radius=1, n_ac=100, sim_time=15 * 60, n_sources=10)
 
 	
