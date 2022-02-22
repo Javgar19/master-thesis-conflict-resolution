@@ -43,13 +43,12 @@ def create_sources(center, radius, n_sources):
 	"""
 	sources_positions = []
 
-	dist_to_center = 3*radius/4
-	earth_radius = geo.rwgs84(center[0])/1852
+	dist_to_center = radius
 
 	for i in range(n_sources):
-		alpha = 2*np.pi/n_sources * i
-		x, y = dist_to_center * np.cos(alpha), dist_to_center * np.sin(alpha)
-		sources_positions.append([center[0] + 180/np.pi * y/earth_radius, center[1] + 180/np.pi * x/earth_radius])
+		alpha = 360/n_sources * i
+		lat, lon = geo.qdrpos(center[0], center[1], alpha, dist_to_center)
+		sources_positions.append([lat, lon])
 
 	return sources_positions
 
@@ -59,11 +58,10 @@ def init_at(radius, center, n_ac):
 
 	for _ in range(n_ac):
 
-		random_angle = random.random() * 2 * np.pi
+		random_angle = random.random() * 360
 		random_distance = random.random()
 
-		random_lat = center[0] +  180/np.pi * random_distance * np.sin(random_angle) / earth_radius 
-		random_lon = center[1] +  180/np.pi * random_distance * np.cos(random_angle) / earth_radius
+		random_lat, random_lon = geo.qdrpos(center[0], center[1], random_angle, random_distance)
 
 
 		angle = geo.qdrdist(random_lat, random_lon, center[0], center[1])[0]
@@ -95,14 +93,10 @@ def spawn_ac(sources_position, radius, center, number_of_aircrafts):
 
 def plot_at(center, radius, sources_position):
 
-	alpha = np.linspace(0, 2*np.pi, 1000)
+	alpha = np.linspace(0, 360, 500)
 
-	ybound = radius * np.sin(alpha)
-	xbound = radius * np.cos(alpha)
-	earth_radius = geo.rwgs84(center[0])/1852
 
-	lats = center[0] + 180/np.pi * ybound/earth_radius
-	lons = center[1] + 180/np.pi * xbound/earth_radius
+	coords = [geo.qdrpos(center[0], center[1], angle, radius) for angle in alpha]
 
 	x = bs.traf.lat
 	y = bs.traf.lon
@@ -111,8 +105,10 @@ def plot_at(center, radius, sources_position):
 
 	plt.figure(figsize=(8, 8))
 	plt.scatter(center[0], center[1], 2)
-	plt.scatter(lats, lons, 1)
+	plt.scatter([coord[0] for coord in coords], [coord[1] for coord in coords], 1)
+	plt.scatter([coord[0] for coord in sources_position], [coord[1] for coord in sources_position])
 	plt.quiver(x, y, vy, vx)
+	plt.title("Scenario initial configuration")
 	plt.show()
 
 
