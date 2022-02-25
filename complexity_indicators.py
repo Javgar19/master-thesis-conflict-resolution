@@ -28,14 +28,14 @@ def node_triplets(G, node):
 	"""
 	Auxiliary funtion that computes and returns the triplets that 'node' belongs to
 	"""
-    triplets = []
-    for neighbor in G.adj[node]:
-        for adj in G.adj[neighbor]:
-            if adj in G.adj[node]:
-                triplet = {node, neighbor, adj}
-                if triplet not in triplets:
-                      triplets.append(triplet)
-    return [list(triplet) for triplet in triplets]
+	triplets = []
+	for neighbor in G.adj[node]:
+		for adj in G.adj[neighbor]:
+			if adj in G.adj[node]:
+				triplet = {node, neighbor, adj}
+				if triplet not in triplets:
+					triplets.append(triplet)
+	return [list(triplet) for triplet in triplets]
 
 def clustering_coeff(G, mean=True):
     """
@@ -64,9 +64,8 @@ def clustering_coeff(G, mean=True):
 
 def nn_degree(graph):
 	nodes_nn_degree = list(nx.average_neighbor_degree(G, weight = "weight").values())
-    return np.mean(nodes_nn_degree)
+	return np.mean(nodes_nn_degree)
 	
-
 
 
 
