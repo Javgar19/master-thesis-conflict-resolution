@@ -11,8 +11,8 @@ def edge_density(graph):
 
 def strength(graph, mean=True):
 	"""
-    Return the strength of every node or the mean value if 'mean' parameter is True
-    """
+	Return the strength of every node or the mean value if 'mean' parameter is True
+	"""
 
 	# Weighted node degrees
 	node_degrees = graph.degree(weight = "weight")
@@ -66,6 +66,5 @@ def nn_degree(graph):
 	nodes_nn_degree = list(nx.average_neighbor_degree(G, weight = "weight").values())
 	return np.mean(nodes_nn_degree)
 	
-
 
 
