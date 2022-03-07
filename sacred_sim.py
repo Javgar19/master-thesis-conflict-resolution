@@ -1,6 +1,4 @@
-
 import sys
-sys.path.insert(0,'C:\\Users\\ralvi\\Desktop\\puna\\uas-updated\\bluesky')
 import numpy as np
 import bluesky as bs
 from bluesky import traffic as tr
@@ -10,22 +8,11 @@ from bluesky.navdatabase import Navdatabase
 from bluesky.simulation import Simulation
 from bluesky.traffic.performance.perfbase import PerfBase
 import matplotlib.pyplot as plt
-from datalogger import Logger
-#import rand_conflict
 from bluesky.tools import geo
 import random
 from sacred import Experiment
 
 ex = Experiment("test-experiment")
-
-
-class ScreenDummy:
-
-    def __init__(self):
-         pass
-
-    def echo(self, text="", flags = 0):
-         pass
 
 
 def check_boundaries(traf, center, radius):
@@ -132,73 +119,46 @@ def cfg():
     n_ac = 100
     sim_time =1*60
     n_sources = 10
+    n_runs = 10000
 
 @ex.automain
-def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources):
-    '''
-    # Initialize global settings
-    settings.init("")
-    # Manually set the performance model to the one defined in the settings before
-    PerfBase.setdefault(settings.performance_model)
-    # Init dummy screen
-    bs.scr = ScreenDummy()
-    # Manually create singletons
-
-    traf = tr.Traffic()
-    bs.traf = traf
-
-    navdb = Navdatabase()
-    bs.navdb = navdb
-
-    sim = Simulation()
-    bs.sim = sim
-    '''
+def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_runs):
+    
 
     bs.init('sim-detached')
     ## We initialize the simulation ##
 
-    bs.sim.simdt = 1
-    bs.sim.simt = 0
-    t_max = sim_time #15 mins
+    for run in range(n_runs):
 
-    ntraf = bs.traf.ntraf
-    n_steps = t_max//bs.sim.simdt + 1
-    print(n_steps)
-    t = np.linspace(0, t_max, n_steps)
+        bs.sim.simdt = 1
+        bs.sim.simt = 0
+        t_max = sim_time #15 mins
 
-    sources_position = create_sources(center, radius, n_sources)
-    init_at(radius, center, n_ac)
-    #plot_at(center, radius, sources_position)
-    
-    #logger = Logger("lat", "lon", "alt", dt = 10, name = "COMP_LOGGER")
-    
-    """ Main loop """
-    change_ffmode()
-    for i in range(n_steps):
+        ntraf = bs.traf.ntraf
+        n_steps = t_max//bs.sim.simdt + 1
+        print(n_steps)
+        t = np.linspace(0, t_max, n_steps)
 
+        sources_position = create_sources(center, radius, n_sources)
+        init_at(radius, center, n_ac)
         
-        #logger.log()
-        """ Check if the acs are out of bounds and delete them if so """
-        check_boundaries(bs.traf, center, radius)
+        """ Main loop """
+        change_ffmode()
+        for i in range(n_steps):
 
-        """ Spawning aircrafts in the sources """
-        if bs.traf.ntraf < n_ac:
-            spawn_ac(sources_position, radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
+            
+            
+            """ Check if the acs are out of bounds and delete them if so """
+            check_boundaries(bs.traf, center, radius)
+
+            """ Spawning aircrafts in the sources """
+            if bs.traf.ntraf < n_ac:
+                spawn_ac(sources_position, radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
 
 
-        simstep()
-        #bs.sim.simt += bs.sim.simdt
-
-        #traf.update()
-        
-        #if bs.traf.ntraf != 100:
-        #    print(bs.traf.ntraf)
-        #if bs.sim.simt % 10 == 0:
-        _run.log_scalar("number_conflicts",100)
-    bs.sim.reset()
-    _run.log_scalar("finished",100)
-    #logger.stop()
-    #del logger
-
-#if __name__ == '__main__':
-#    complexity_simulation(ScreenDummy, center=(47, 9), radius=1, n_ac=100, sim_time=2 * 60, n_sources=10)
+            simstep()
+            
+        _run.log_scalar("number_conflicts",len(bs.traf.cd.confpairs_all)) # _run.log_scalar(key,value) records a metric. this is the preferred way of logging the data we need
+        bs.sim.reset()
+    
+    
