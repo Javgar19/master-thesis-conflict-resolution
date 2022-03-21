@@ -5,8 +5,8 @@ import networkx as nx
 def edge_density(graph):
 
     # Sum of the weights 
-    sum_w = sum([d["weight"] for _, _, d in G.edges(data=True)])
-    V = G.number_of_nodes()
+    sum_w = sum([d["weight"] for _, _, d in graph.edges(data=True)])
+    V = graph.number_of_nodes()
     return sum_w / (V*(V-1)/2)
 
 def strength(graph, mean=True):
@@ -63,8 +63,17 @@ def clustering_coeff(G, mean=True):
 
 
 def nn_degree(graph):
-	nodes_nn_degree = list(nx.average_neighbor_degree(G, weight = "weight").values())
+	nodes_nn_degree = list(nx.average_neighbor_degree(graph, weight = "weight").values())
 	return np.mean(nodes_nn_degree)
 	
 
 
+def comp_conf(graph):
+		"""
+		Return a list with all compound conficts
+		"""
+		if graph.number_of_edges != 0:
+			comp_confs = [comp_conf for comp_conf in nx.connected_components(graph) if len(comp_conf) > 2] 
+			return comp_confs
+
+		return []
