@@ -89,10 +89,10 @@ def plot_at(center, radius, sources_position):
 
     coords = [geo.qdrpos(center[0], center[1], angle, radius) for angle in alpha]
 
-    x = bs.traf.lat[0]
-    y = bs.traf.lon[0]
-    vx = bs.traf.gseast[0]
-    vy = bs.traf.gsnorth[0]
+    x = bs.traf.lat
+    y = bs.traf.lon
+    vx = bs.traf.gseast
+    vy = bs.traf.gsnorth
 
     plt.figure(figsize=(8, 8))
     plt.scatter(center[0], center[1], 2)
@@ -119,7 +119,8 @@ def at_to_graph():
 
     return graph
 
-def log_variables(graph, _run):
+def log_variables(t, graph, _run):
+    _run.log_scalar("timestep", t)
     _run.log_scalar("edge_density",ind.edge_density(graph))
     _run.log_scalar("strength",ind.strength(graph))
     _run.log_scalar("clustering_coeff",ind.clustering_coeff(graph))
@@ -135,7 +136,7 @@ def log_variables(graph, _run):
     else:
         conf_size = 0
         
-    _run.log_scalar("conf_size", bs.traf.ntraf)
+    _run.log_scalar("conf_size", conf_size)
 
 
     
@@ -153,11 +154,12 @@ def append_variables(variables, graph):
     for pair in bs.traf.cd.confpairs_all:
         variables["confs"].append({pair[0], pair[1]})
 
-    comp_confs = ind.comp_conf(bs.traf.cd.confpairs_all)
+    comp_confs = ind.comp_conf(graph)
     for conf in comp_confs:
         variables["comp_confs"].append(conf)
 
-def log_conflict_variables(variables, _run):
+def log_conflict_variables(t, variables, _run):
+    _run.log_scalar("timestep", t)
 
     _run.log_scalar("edge_density", max(variables["ed"]))
     _run.log_scalar("strength",max(variables["s"]))
@@ -168,15 +170,15 @@ def log_conflict_variables(variables, _run):
     _run.log_scalar("number_comp_conf",len(variables["comp_confs"]))
 
     conf_size = max([len(comp_conf) for comp_conf in variables["comp_confs"]])
-    _run.log_scalar("conf_size", bs.traf.ntraf)
+    _run.log_scalar("conf_size", conf_size)
 
 
 @ex.config
 def cfg():
     
     center = (47, 9)
-    radius = 1
-    n_ac = 100
+    radius = 0.001
+    n_ac = 500
     sim_time =1*60
     n_sources = 10
     n_runs = 1
@@ -219,18 +221,18 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_run
             if (len(bs.traf.cd.confpairs_all) == 0) | (i == n_steps - 1):
 
                 if sum([len(variables[key]) for key in variables]) != 0:
-                    log_conflict_variables(variables, _run)
+                    log_conflict_variables(bs.sim.simt, variables, _run)
 
                     for key in variables:
                         variables[key] = [] # reset all the values to an empty list
 
-                log_variables(graph, _run)
+                log_variables(bs.sim.simt, graph, _run)
 
             else:
                 append_variables(variables, graph)
 
-            plot_at(center, radius, sources_position)
-            #print(bs.traf.lat[0], bs.traf.lon[0])
+            #plot_at(center, radius, sources_position)
+            print(len(bs.traf.cd.confpairs_all))
             simstep()
             
 
