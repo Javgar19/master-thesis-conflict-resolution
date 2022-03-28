@@ -111,11 +111,53 @@ def change_ffmode(mode=True):
         bs.sim.ffmode = mode
         bs.sim.dtmult = 5.0
 
-def at_to_graph():
+def dhij(acid1, acid2):
+    """
+    Horizontal distance (m) between acid1 and acid2
+    """
+    return geo.latlondist(bs.traf.lat[bs.traf.id.index(acid1)], bs.traf.lon[bs.traf.id.index(acid1)],
+                        bs.traf.lat[bs.traf.id.index(acid2)], bs.traf.lon[bs.traf.id.index(acid2)])
+
+def whij(acid1, acid2, H, thresh, minh):
+    """
+    Horizontal weight for the edge between acid1 and acid2 
+    """
+    dij = dhij(acid1, acid2)
+
+    if dij <= H:
+        return 1
+
+    elif dij >= thresh:
+        return 0
+
+    else:
+        return (thresh - dij)/(thresh - minh)
+
+def tcp(acid1, acid2, Htcp, threshtcp):
+    """
+    Horizontal weight for the edge between acid1 and acid2 
+    """
+    if len(bs.traf.cd.tcpa) != 0:
+        tcpa = np.abs(bs.traf.cd.tcpa[0][1])
+    else:
+        tcpa = 0
+
+    if tcpa <= Htcp:
+        return 1
+
+    elif tcpa >= threshtcp:
+        return 0
+
+    else:
+        return (threshtcp - tcpa)/(threshtcp) 
+
+def at_to_graph(H, thresh):
     graph = nx.Graph()
     graph.add_nodes_from(bs.traf.id)
-    for pair in bs.traf.cd.confpairs_all:
-        graph.add_edge(pair[0], pair[1])
+    for pair in bs.traf.cd.confpairs_unique:
+        pair = list(pair)
+        wtcp = tcp(pair[0], pair[1], H, thresh)
+        graph.add_edge(pair[0], pair[1], weight = wtcp)
 
     return graph
 
@@ -125,7 +167,7 @@ def log_variables(t, graph, _run):
     _run.log_scalar("strength",ind.strength(graph))
     _run.log_scalar("clustering_coeff",ind.clustering_coeff(graph))
     _run.log_scalar("nn_degree",ind.nn_degree(graph))
-    _run.log_scalar("number_conflicts",len(bs.traf.cd.confpairs_all))
+    _run.log_scalar("number_conflicts",len(bs.traf.cd.confpairs_unique))
 
     comp_confs = ind.comp_conf(graph)
     _run.log_scalar("number_comp_conf",len(comp_confs))
@@ -151,25 +193,34 @@ def append_variables(variables, graph):
     variables["cc"].append(ind.clustering_coeff(graph))
     variables["nnd"].append(ind.nn_degree(graph))
 
-    for pair in bs.traf.cd.confpairs_all:
-        variables["confs"].append({pair[0], pair[1]})
+    for pair in bs.traf.cd.confpairs_unique:
+        pair = list(pair)
+        pair = {pair[0], pair[1]}
+        if (not pair in variables["confs"]):
+            variables["confs"].append(pair)
 
     comp_confs = ind.comp_conf(graph)
     for conf in comp_confs:
-        variables["comp_confs"].append(conf)
+        if not conf in variables["comp_confs"]:
+            variables["comp_confs"].append(conf)
 
 def log_conflict_variables(t, variables, _run):
     _run.log_scalar("timestep", t)
 
     _run.log_scalar("edge_density", max(variables["ed"]))
     _run.log_scalar("strength",max(variables["s"]))
-    _run.log_scalar("clustering_coeff",max(variables["c"]))
+    _run.log_scalar("clustering_coeff",max(variables["cc"]))
     _run.log_scalar("nn_degree",max(variables["nnd"]))
 
     _run.log_scalar("number_conflicts", len(variables["confs"]))
     _run.log_scalar("number_comp_conf",len(variables["comp_confs"]))
 
-    conf_size = max([len(comp_conf) for comp_conf in variables["comp_confs"]])
+
+    if variables["comp_confs"]:
+        conf_size = max([len(comp_conf) for comp_conf in variables["comp_confs"]])
+    else:
+        conf_size = 0
+
     _run.log_scalar("conf_size", conf_size)
 
 
@@ -177,27 +228,34 @@ def log_conflict_variables(t, variables, _run):
 def cfg():
     
     center = (47, 9)
-    radius = 0.001
-    n_ac = 500
-    sim_time =1*60
+    radius = 1
+    n_ac = 20
+    sim_time = 1*60
     n_sources = 10
     n_runs = 1
+    rpz = 5
 
 @ex.automain
-def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_runs):
+def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_runs, rpz):
     
 
     bs.init('sim-detached')
     ## We initialize the simulation ##
 
+    bs.traf.cd.setmethod("ON")
+    bs.traf.cd.rpz_def = rpz
+    bs.traf.cd.dtlookahead_def = 300
+    #bs.traf.cd.rpz = rpz
+    #bs.traf.cd.dtlookahead = 300
+
     for run in range(n_runs):
 
-        bs.sim.simdt = 1
-        bs.sim.simt = 0
+        #bs.sim.simdt = 1
+        #bs.sim.simt = 0
         t_max = sim_time #15 mins
 
         ntraf = bs.traf.ntraf
-        n_steps = t_max//bs.sim.simdt + 1
+        n_steps = int(t_max//bs.sim.simdt + 1)
         t = np.linspace(0, t_max, n_steps)
 
         sources_position = create_sources(center, radius, n_sources)
@@ -216,9 +274,9 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_run
             if bs.traf.ntraf < n_ac:
                 spawn_ac(sources_position, radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
 
-            graph = at_to_graph()
+            graph = at_to_graph(4, 15)
 
-            if (len(bs.traf.cd.confpairs_all) == 0) | (i == n_steps - 1):
+            if (len(bs.traf.cd.confpairs_unique) == 0) | (i == n_steps - 1):
 
                 if sum([len(variables[key]) for key in variables]) != 0:
                     log_conflict_variables(bs.sim.simt, variables, _run)
@@ -226,13 +284,14 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_run
                     for key in variables:
                         variables[key] = [] # reset all the values to an empty list
 
+                
                 log_variables(bs.sim.simt, graph, _run)
 
             else:
                 append_variables(variables, graph)
 
             #plot_at(center, radius, sources_position)
-            print(len(bs.traf.cd.confpairs_all))
+            print(len(bs.traf.cd.confpairs_unique), i)
             simstep()
             
 

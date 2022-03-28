@@ -51,6 +51,7 @@ def clustering_coeff(G, mean=True):
             for triplet in triplets:
                 wijk += G[triplet.pop(triplet.index(node))][triplet[0]]["weight"] + G[triplet[0]][triplet[1]]["weight"]
 
+            #print(G.degree(nbunch=node))
             clustering_coeffs.append(wijk/(2 * G.degree(weight = "weight", nbunch=node) * (G.degree(nbunch=node) - 1)))
 
         else:
