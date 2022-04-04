@@ -59,6 +59,7 @@ def init_at(radius, center, n_ac):
 
         random_lat, random_lon = geo.qdrpos(center[0], center[1], random_angle, random_distance)
 
+        random_speed = np.random.uniform(10,20)
 
         angle = geo.qdrdist(random_lat, random_lon, center[0], center[1])[0]
         limit_angle = np.arccos(random_distance/(2 * radius)) * 180 / np.pi 
@@ -66,20 +67,26 @@ def init_at(radius, center, n_ac):
         acid = str(random.getrandbits(32))
         heading = random.uniform(angle - limit_angle, angle + limit_angle)
 
-        bs.traf.cre(acid, actype="M200", aclat=random_lat, aclon=random_lon, acspd=40, achdg=heading)
+        bs.traf.cre(acid, actype="M200", aclat=random_lat, aclon=random_lon, acspd=random_speed, achdg=heading)
 
 
-def spawn_ac(sources_position, radius, center, number_of_aircrafts):
+def spawn_ac(radius, center, number_of_aircrafts):
 
     for _ in range(number_of_aircrafts):
-        source = random.choice(sources_position)
-        angle = geo.qdrdist(source[0], source[1], center[0], center[1])[0]
-        limit_angle = 30
+        random_angle = random.random() * 360
+        random_distance = radius * np.sqrt(random.random())
+
+        random_lat, random_lon = geo.qdrpos(center[0], center[1], random_angle, random_distance)
+
+        random_speed = np.random.uniform(10,20)
+
+        angle = geo.qdrdist(random_lat, random_lon, center[0], center[1])[0]
+        limit_angle = np.arccos(random_distance/(2 * radius)) * 180 / np.pi 
 
         acid = str(random.getrandbits(32))
         heading = random.uniform(angle - limit_angle, angle + limit_angle)
 
-        bs.traf.cre(acid, actype="M200", aclat=source[0], aclon=source[1], acspd=40, achdg=heading)
+        bs.traf.cre(acid, actype="M200", aclat=random_lat, aclon=random_lon, acspd=random_speed, achdg=heading)
 
 
 def plot_at(center, radius, sources_position):
@@ -228,15 +235,15 @@ def log_conflict_variables(t, variables, _run):
 def cfg():
     
     center = (47, 9)
-    radius = 1
-    n_ac = 20
-    sim_time = 1*60
-    n_sources = 10
+    radius = 0.5
+    n_ac = 100
+    sim_time = 2*radius*1850*0.1
     n_runs = 1
-    rpz = 5
+    rpz = 0.089
+    tcpa_thresh = 35
 
 @ex.automain
-def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_runs, rpz):
+def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcpa_thresh):
     
 
     bs.init('sim-detached')
@@ -244,7 +251,7 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_run
 
     bs.traf.cd.setmethod("ON")
     bs.traf.cd.rpz_def = rpz
-    bs.traf.cd.dtlookahead_def = 300
+    bs.traf.cd.dtlookahead_def = 15
     #bs.traf.cd.rpz = rpz
     #bs.traf.cd.dtlookahead = 300
 
@@ -252,16 +259,17 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_run
 
         #bs.sim.simdt = 1
         #bs.sim.simt = 0
-        t_max = sim_time #15 mins
+        t_max = sim_time 
 
         ntraf = bs.traf.ntraf
         n_steps = int(t_max//bs.sim.simdt + 1)
         t = np.linspace(0, t_max, n_steps)
 
-        sources_position = create_sources(center, radius, n_sources)
+        
         init_at(radius, center, n_ac)
 
         variables = {"ed": [], "s": [], "cc": [], "nnd": [], "confs": [], "comp_confs": []}
+
         """ Main loop """
         change_ffmode()
         for i in range(n_steps):
@@ -272,9 +280,9 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_run
 
             """ Spawning aircrafts in the sources """
             if bs.traf.ntraf < n_ac:
-                spawn_ac(sources_position, radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
+                spawn_ac(radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
 
-            graph = at_to_graph(4, 15)
+            graph = at_to_graph(4, tcpa_thresh)
 
             if (len(bs.traf.cd.confpairs_unique) == 0) | (i == n_steps - 1):
 
@@ -291,7 +299,7 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_sources, n_run
                 append_variables(variables, graph)
 
             #plot_at(center, radius, sources_position)
-            print(len(bs.traf.cd.confpairs_unique), i)
+            print(bs.traf.ntraf, len(bs.traf.cd.confpairs_unique), i)
             simstep()
             
 
