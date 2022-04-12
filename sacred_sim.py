@@ -262,29 +262,28 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
         t_max = sim_time 
 
         ntraf = bs.traf.ntraf
-        n_steps = int(t_max//bs.sim.simdt + 1)
-        t = np.linspace(0, t_max, n_steps)
 
-        
         init_at(radius, center, n_ac)
 
         variables = {"ed": [], "s": [], "cc": [], "nnd": [], "confs": [], "comp_confs": []}
 
         """ Main loop """
         change_ffmode()
-        for i in range(n_steps):
+        while bs.sim.simt < sim_time:
 
-            
+            if not bs.sim.ffmode:
+                bs.sim.ffmode = True
+
             """ Check if the acs are out of bounds and delete them if so """
             check_boundaries(bs.traf, center, radius)
 
-            """ Spawning aircrafts in the sources """
+            """ Spawning aircrafts """
             if bs.traf.ntraf < n_ac:
                 spawn_ac(radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
 
             graph = at_to_graph(4, tcpa_thresh)
 
-            if (len(bs.traf.cd.confpairs_unique) == 0) | (i == n_steps - 1):
+            if (len(bs.traf.cd.confpairs_unique) == 0) | (bs.sim.simt + bs.sim.simdt >= sim_time):
 
                 if sum([len(variables[key]) for key in variables]) != 0:
                     log_conflict_variables(bs.sim.simt, variables, _run)
@@ -299,7 +298,7 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
                 append_variables(variables, graph)
 
             #plot_at(center, radius, sources_position)
-            print(bs.traf.ntraf, len(bs.traf.cd.confpairs_unique), i)
+            #print(bs.traf.ntraf, len(bs.traf.cd.confpairs_unique), i)
             simstep()
             
 
