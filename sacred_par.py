@@ -15,7 +15,7 @@ from bluesky.tools import geo
 import random
 from sacred import Experiment
 import networkx as nx
-from multiprocessing import Lock, Process, Queue, current_process,cpu_count
+from multiprocessing import Lock, Process, Queue, current_process,cpu_count, Manager
 import queue
 import time
 import complexity_indicators as ind
@@ -40,12 +40,12 @@ def worker(n_runs,task_queue, done):
     bs.init('sim-detached')
     while True:
         try:
-            task = task_queue.get_nowait()
+            task = task_queue.get(timeout=1)#task_queue.get_nowait()
         except queue.Empty:
-            
             break
         else:
             answer = task()
+
             done.put(answer)
             #prog_bar(n_runs, done.qsize())
             time.sleep(.5)
@@ -76,11 +76,10 @@ class Simulation(object):
         """ Main loop """
         t = 0
         result = []
-        while bs.sim.simt <=self.sim_time:
+        while bs.sim.simt <= self.sim_time:
             
             if not bs.sim.ffmode:
                 change_ffmode()
-
 
             """ Check if the acs are out of bounds and delete them if so """
             check_boundaries(bs.traf, self.center, self.radius)
@@ -89,26 +88,31 @@ class Simulation(object):
             if bs.traf.ntraf < self.n_ac:
                 spawn_ac(self.radius, self.center, number_of_aircrafts = self.n_ac - bs.traf.ntraf)
 
-            graph = at_to_graph(4, self.tcpa_thresh)
+            
+            try:
+                graph = at_to_graph(4, self.tcpa_thresh)
 
+            except ValueError:
+                return
+            
             if (len(bs.traf.cd.confpairs_unique) == 0) | (bs.sim.simt + bs.sim.simdt >= self.sim_time):
-
+                
                 if sum([len(variables[key]) for key in variables]) != 0:
-                    result.append(log_conflict_variables(bs.sim.simt, variables, self.num_sim))
-                    return result
+                    result.append(log_conflict_variables(bs.sim.simt, variables, self.num_sim, self.radius, self.n_ac, self.tcpa_thresh))
 
                     for key in variables:
                         variables[key] = [] # reset all the values to an empty list
-
                 
-                result.append(log_variables(bs.sim.simt, graph, self.num_sim))
+                result.append(log_variables(bs.sim.simt, graph, self.num_sim, self.radius, self.n_ac, self.tcpa_thresh))
 
             else:
                 append_variables(variables, graph)
-
+            
+            
+            #print(self.num_sim, bs.sim.simt, len(bs.traf.cd.confpairs_unique))
             simstep()
             t = bs.sim.simt
-            print(self.num_sim, len(bs.traf.cd.confpairs_unique))
+            
         
         bs.sim.reset()
         return result
@@ -218,6 +222,7 @@ def tcp(acid1, acid2, Htcp, threshtcp):
     Horizontal weight for the edge between acid1 and acid2 
     """
     tcpa_matrix = bs.traf.cd.tcpa
+    #return 0
     
     if len(tcpa_matrix) != 0:
         tcpa = np.abs(tcpa_matrix[bs.traf.id.index(acid1)][bs.traf.id.index(acid2)])
@@ -237,6 +242,7 @@ def tcp(acid1, acid2, Htcp, threshtcp):
 def at_to_graph(H, thresh):
     graph = nx.Graph()
     graph.add_nodes_from(bs.traf.id)
+    
     for pair in bs.traf.cd.confpairs_unique:
         pair = list(pair)
         wtcp = tcp(pair[0], pair[1], H, thresh)
@@ -244,8 +250,11 @@ def at_to_graph(H, thresh):
 
     return graph
 
-def log_variables(t, graph, num_sim):
+def log_variables(t, graph, num_sim, radius, n_ac, thr):
     result = []
+    result.append(radius)
+    result.append(n_ac)
+    result.append(thr)
     result.append(t)
     result.append(num_sim)
     result.append(ind.edge_density(graph))
@@ -289,8 +298,11 @@ def append_variables(variables, graph):
         if not conf in variables["comp_confs"]:
             variables["comp_confs"].append(conf)
 
-def log_conflict_variables(t, variables, num_sim):
+def log_conflict_variables(t, variables, num_sim, radius, n_ac, thr):
     result = []
+    result.append(radius)
+    result.append(n_ac)
+    result.append(thr)
     result.append(t)
     result.append(num_sim)
 
@@ -312,15 +324,18 @@ def log_conflict_variables(t, variables, num_sim):
     return result
 
 def log_after_par(results, _run):
-    _run.log_scalar("timestep", results[0])
-    _run.log_scalar("num_sim", results[1])
-    _run.log_scalar("edge_density", results[2])
-    _run.log_scalar("strength", results[3])
-    _run.log_scalar("clustering_coeff", results[4])
-    _run.log_scalar("nn_degree", results[5])
-    _run.log_scalar("number_conflicts", results[6])
-    _run.log_scalar("number_comp_conf", results[7])
-    _run.log_scalar("conf_size",  results[8])
+    _run.log_scalar("radius", results[0])
+    _run.log_scalar("n_ac", results[1])
+    _run.log_scalar("threshold", results[2])
+    _run.log_scalar("timestep", results[3])
+    _run.log_scalar("num_sim", results[4])
+    _run.log_scalar("edge_density", results[5])
+    _run.log_scalar("strength", results[6])
+    _run.log_scalar("clustering_coeff", results[7])
+    _run.log_scalar("nn_degree", results[8])
+    _run.log_scalar("number_conflicts", results[9])
+    _run.log_scalar("number_comp_conf", results[10])
+    _run.log_scalar("conf_size",  results[11])
 
 
 @ex.config
@@ -330,15 +345,16 @@ def cfg():
     radius = 0.5
     n_ac = 100
     sim_time = 2*radius*1850*0.1
-    n_runs = 1
+    n_runs = 500
     rpz = 0.089
     tcpa_thresh = 35
 
 @ex.automain
 def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcpa_thresh):
+    manager = Manager()
 
-    runs_to_do = Queue()
-    runs_done = Queue()
+    runs_to_do = manager.Queue()#Queue()
+    runs_done = manager.Queue()#Queue()
     procs = []
     res = []
     
@@ -348,24 +364,27 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
     for i in range(n_runs):
         runs_to_do.put(Simulation(center, radius, n_ac, sim_time, rpz, tcpa_thresh, i))
 
-    num_workers = cpu_count()
+    num_workers = cpu_count() 
     print(f"{num_workers} PROCESSES ARE BEING CREATED")
     for i in range(num_workers):
         p = Process(target=worker,args=(n_runs,runs_to_do,runs_done))
         procs.append(p)
         p.start()
-
+    
     for p in procs:
         print("JOINING")
         p.join()
-    
+
     while not runs_done.empty():
         res.append(runs_done.get())
-
+    #print(runs_done)
+    
     print(res)
     
     # We log with Incense every run after the process has finished #
-    for run in res:
-        log_after_par(run, _run)
+    for runs in res:
+        if runs:
+            for run in runs:
+                log_after_par(run, _run)
     
     

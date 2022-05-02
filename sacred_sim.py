@@ -32,24 +32,6 @@ def check_boundaries(traf, center, radius):
             traf.delete(bs.traf.id.index(idx))
 
 
-def create_sources(center, radius, n_sources):
-    """
-    The sources will create a polygon centered in the simulation. The function returns
-    a list with each source coordinates
-    """
-    sources_positions = []
-
-    dist_to_center = radius
-
-    for i in range(n_sources):
-        alpha = 360/n_sources * i
-        lat, lon = geo.qdrpos(center[0], center[1], alpha, dist_to_center)
-        sources_positions.append([lat, lon])
-
-    return sources_positions
-
-
-
 def init_at(radius, center, n_ac):
 
     for _ in range(n_ac):
@@ -115,8 +97,8 @@ def simstep():
     
 
 def change_ffmode(mode=True):
-        bs.sim.ffmode = mode
-        bs.sim.dtmult = 5.0
+    bs.sim.ffmode = mode
+    bs.sim.dtmult = 15.0
 
 def dhij(acid1, acid2):
     """
@@ -144,8 +126,11 @@ def tcp(acid1, acid2, Htcp, threshtcp):
     """
     Horizontal weight for the edge between acid1 and acid2 
     """
-    if len(bs.traf.cd.tcpa) != 0:
-        tcpa = np.abs(bs.traf.cd.tcpa[0][1])
+    tcpa_matrix = bs.traf.cd.tcpa
+    
+    if len(tcpa_matrix) != 0:
+        tcpa = np.abs(tcpa_matrix[bs.traf.id.index(acid1)][bs.traf.id.index(acid2)])
+        
     else:
         tcpa = 0
 
@@ -168,8 +153,12 @@ def at_to_graph(H, thresh):
 
     return graph
 
-def log_variables(t, graph, _run):
+def log_variables(t, graph, _run, num_sim, radius, n_ac, thr):
+    _run.log_scalar("radius", radius)
+    _run.log_scalar("n_ac", n_ac)
+    _run.log_scalar("threshold", thr)
     _run.log_scalar("timestep", t)
+    _run.log_scalar("num_sim", num_sim)
     _run.log_scalar("edge_density",ind.edge_density(graph))
     _run.log_scalar("strength",ind.strength(graph))
     _run.log_scalar("clustering_coeff",ind.clustering_coeff(graph))
@@ -211,8 +200,12 @@ def append_variables(variables, graph):
         if not conf in variables["comp_confs"]:
             variables["comp_confs"].append(conf)
 
-def log_conflict_variables(t, variables, _run):
+def log_conflict_variables(t, variables, _run, num_sim, radius, n_ac, thr):
+    _run.log_scalar("radius", radius)
+    _run.log_scalar("n_ac", n_ac)
+    _run.log_scalar("threshold", thr)
     _run.log_scalar("timestep", t)
+    _run.log_scalar("num_sim", num_sim)
 
     _run.log_scalar("edge_density", max(variables["ed"]))
     _run.log_scalar("strength",max(variables["s"]))
@@ -238,7 +231,7 @@ def cfg():
     radius = 0.5
     n_ac = 100
     sim_time = 2*radius*1850*0.1
-    n_runs = 1
+    n_runs = 500
     rpz = 0.089
     tcpa_thresh = 35
 
@@ -286,19 +279,18 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
             if (len(bs.traf.cd.confpairs_unique) == 0) | (bs.sim.simt + bs.sim.simdt >= sim_time):
 
                 if sum([len(variables[key]) for key in variables]) != 0:
-                    log_conflict_variables(bs.sim.simt, variables, _run)
+                    log_conflict_variables(bs.sim.simt, variables, _run, run, radius, n_ac, tcpa_thresh)
 
                     for key in variables:
                         variables[key] = [] # reset all the values to an empty list
 
                 
-                log_variables(bs.sim.simt, graph, _run)
+                log_variables(bs.sim.simt, graph, _run, run, radius, n_ac, tcpa_thresh)
 
             else:
                 append_variables(variables, graph)
 
             #plot_at(center, radius, sources_position)
-            #print(bs.traf.ntraf, len(bs.traf.cd.confpairs_unique), i)
             simstep()
             
 
