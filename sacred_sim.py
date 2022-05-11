@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+from psutil import wait_procs
 import bluesky as bs
 from bluesky import traffic as tr
 from bluesky import settings
@@ -15,7 +16,6 @@ import complexity_indicators as ind
 import networkx as nx
 
 ex = Experiment("test-experiment")
-
 
 def check_boundaries(traf, center, radius):
     """
@@ -51,6 +51,45 @@ def init_at(radius, center, n_ac):
 
         bs.traf.cre(acid, actype="M200", aclat=random_lat, aclon=random_lon, acspd=random_speed, achdg=heading)
 
+def init_at_wp(radius, center, n_ac, waypoints_positions):
+
+    ac_id = 0
+    for _ in range(n_ac):
+
+        random_angle = random.random() * 360
+        random_distance = radius * np.sqrt(random.random())
+
+        random_lat, random_lon = geo.qdrpos(center[0], center[1], random_angle, random_distance)
+
+        random_speed = np.random.uniform(10,20)
+
+        random_wp = random.choice(waypoints_positions)
+        heading = geo.qdrdist(random_lat, random_lon, random_wp[0], random_wp[1])[0]
+         
+        acid = str(ac_id)
+        ac_id += 1
+
+        bs.traf.cre(acid, actype="M200", aclat=random_lat, aclon=random_lon, acspd=random_speed, achdg=heading)
+        
+    return ac_id
+
+
+def create_waypoints(center, radius, n_waypoints):
+	"""
+	The waypoints will create a polygon centered in the simulation. The function returns
+	a list with each waypoint coordinates
+	"""
+	waypoints_positions = []
+
+	dist_to_center = radius/2
+
+	for i in range(n_waypoints):
+		alpha = 360/n_waypoints * i
+		lat, lon = geo.qdrpos(center[0], center[1], alpha, dist_to_center)
+		waypoints_positions.append([lat, lon])
+
+	return waypoints_positions
+
 
 def spawn_ac(radius, center, number_of_aircrafts):
 
@@ -69,6 +108,27 @@ def spawn_ac(radius, center, number_of_aircrafts):
         heading = random.uniform(angle - limit_angle, angle + limit_angle)
 
         bs.traf.cre(acid, actype="M200", aclat=random_lat, aclon=random_lon, acspd=random_speed, achdg=heading)
+
+
+def spawn_ac_wp(radius, center, number_of_aircrafts, waypoints_positions, ac_id):
+
+    for _ in range(number_of_aircrafts):
+        random_angle = random.random() * 360
+        random_distance = radius * np.sqrt(random.random())
+
+        random_lat, random_lon = geo.qdrpos(center[0], center[1], random_angle, random_distance)
+
+        random_speed = np.random.uniform(10,20)
+
+        random_wp = random.choice(waypoints_positions)
+        heading = geo.qdrdist(random_lat, random_lon, random_wp[0], random_wp[1])[0]
+         
+        acid = str(ac_id)
+        ac_id += 1
+        
+        bs.traf.cre(acid, actype="M200", aclat=random_lat, aclon=random_lon, acspd=random_speed, achdg=heading)
+        
+    return ac_id
 
 
 def plot_at(center, radius, sources_position):
@@ -223,6 +283,9 @@ def log_conflict_variables(t, variables, _run, num_sim, radius, n_ac, thr):
 
     _run.log_scalar("conf_size", conf_size)
 
+    if conf_size:
+        print(f'Compound conflict between {conf_size} aircrafts detected')
+
 
 @ex.config
 def cfg():
@@ -242,21 +305,29 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
     bs.init('sim-detached')
     ## We initialize the simulation ##
 
-    bs.traf.cd.setmethod("ON")
-    bs.traf.cd.rpz_def = rpz
-    bs.traf.cd.dtlookahead_def = 15
+    
     #bs.traf.cd.rpz = rpz
     #bs.traf.cd.dtlookahead = 300
-
+    
     for run in range(n_runs):
+        print(f"Run {run}")
+        bs.traf.cd.setmethod("ON")
+        bs.traf.cd.rpz_def = rpz
+        bs.traf.cd.dtlookahead_def = 15
 
         #bs.sim.simdt = 1
         #bs.sim.simt = 0
         t_max = sim_time 
 
-        ntraf = bs.traf.ntraf
+        
+        n_waypoints = 6
 
-        init_at(radius, center, n_ac)
+        waypoints_position = create_waypoints(center, radius, n_waypoints)
+        ac_id = init_at_wp(radius, center, n_ac, waypoints_position)
+        
+        #plot_at(center, radius, waypoints_position)
+
+        #init_at(radius, center, n_ac)
 
         variables = {"ed": [], "s": [], "cc": [], "nnd": [], "confs": [], "comp_confs": []}
 
@@ -272,7 +343,10 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
 
             """ Spawning aircrafts """
             if bs.traf.ntraf < n_ac:
-                spawn_ac(radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
+                #print(f"Before {bs.traf.ntraf} {n_ac}")
+                #spawn_ac(radius, center, number_of_aircrafts = n_ac - bs.traf.ntraf)
+                ac_id = spawn_ac_wp(radius, center, n_ac - bs.traf.ntraf, waypoints_position, ac_id)
+                #print(f"After {bs.traf.ntraf} {n_ac}")
 
             graph = at_to_graph(4, tcpa_thresh)
 
@@ -292,6 +366,7 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
 
             #plot_at(center, radius, sources_position)
             simstep()
+            
             
 
         bs.sim.reset()

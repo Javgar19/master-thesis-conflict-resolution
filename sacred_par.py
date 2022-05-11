@@ -222,7 +222,7 @@ def tcp(acid1, acid2, Htcp, threshtcp):
     Horizontal weight for the edge between acid1 and acid2 
     """
     tcpa_matrix = bs.traf.cd.tcpa
-    #return 0
+    
     
     if len(tcpa_matrix) != 0:
         tcpa = np.abs(tcpa_matrix[bs.traf.id.index(acid1)][bs.traf.id.index(acid2)])
