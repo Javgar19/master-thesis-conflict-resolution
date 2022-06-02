@@ -148,6 +148,31 @@ def spawn_ac_wp(radius, center, number_of_aircrafts, waypoints_positions, ac_id)
         
     return ac_id
 
+def front_colission(radius, center, number_of_aircrafts, waypoints_positions):
+
+    
+    random_angle = random.random() * 360
+    random_distance = radius 
+
+    random_lat1, random_lon1 = geo.qdrpos(center[0], center[1], random_angle, random_distance)
+    random_lat2, random_lon2 = geo.qdrpos(center[0], center[1], random_angle + 180, random_distance)
+    
+
+    random_speed = np.random.uniform(10,20)
+
+    random_wp = center
+    heading1 = geo.qdrdist(random_lat1, random_lon1, random_wp[0], random_wp[1])[0]
+    heading2 = geo.qdrdist(random_lat2, random_lon2, random_wp[0], random_wp[1])[0]
+    
+    ac_id = 0
+    acid1 = str(ac_id)
+    ac_id += 1
+    acid2 = str(ac_id)
+    
+    bs.traf.cre(acid1, actype="M200", aclat=random_lat1, aclon=random_lon1, acalt=300, acspd=random_speed, achdg=heading1)
+    bs.traf.cre(acid2, actype="M200", aclat=random_lat2, aclon=random_lon2, acalt=300, acspd=random_speed, achdg=heading2)
+        
+    return ac_id
 
 def plot_at(center, radius, sources_position):
 
@@ -244,16 +269,11 @@ def log_variables(t, conf_graph, comp_graph, _run, num_sim, radius, n_ac, thr):
     _run.log_scalar("threshold", thr)
     _run.log_scalar("timestep", t)
     _run.log_scalar("num_sim", num_sim)
-    print("a")
     _run.log_scalar("edge_density",ind.edge_density(comp_graph))
-    print("b")
     _run.log_scalar("strength",ind.strength(comp_graph))
-    print("c")
     #_run.log_scalar("clustering_coeff",ind.clustering_coeff(comp_graph))
     _run.log_scalar("clustering_coeff", nx.average_clustering(comp_graph, weight="weight"))
-    print("d")
     _run.log_scalar("nn_degree",ind.nn_degree(comp_graph))
-    print("e")
     _run.log_scalar("number_conflicts",len(bs.traf.cd.confpairs_unique))
 
     comp_confs = ind.comp_conf(conf_graph)
@@ -326,7 +346,7 @@ def cfg():
     n_ac = 100
     sim_time = 2*radius*1850*0.1
     n_runs = 1
-    rpz = 0.089
+    rpz = 0.13
     tcpa_thresh = 35
 
 @ex.automain
@@ -344,7 +364,7 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
         print(f"Run {run}")
         
         bs.traf.cd.setmethod("ON")
-        bs.traf.cr.setmethod("ON")
+        bs.traf.cr.setmethod("MVP")
         bs.traf.cd.rpz_def = rpz
         bs.traf.cd.dtlookahead_def = 15
 
@@ -356,7 +376,8 @@ def complexity_simulation(_run, center, radius, n_ac, sim_time, n_runs, rpz, tcp
         n_waypoints = 1
 
         waypoints_position = create_waypoints(center, radius, n_waypoints)
-        ac_id = init_at_wp(radius, center, n_ac, waypoints_position)
+        #ac_id = init_at_wp(radius, center, n_ac, waypoints_position)
+        ac_id = front_colission(radius, center, n_ac, waypoints_position)
         simstep()
         
         #plot_at(center, radius, waypoints_position)

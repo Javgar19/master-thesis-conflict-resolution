@@ -2,6 +2,7 @@ from multiprocessing.dummy import Process
 import sys
 import numpy as np
 
+
 import bluesky as bs
 from bluesky import traffic as tr
 from bluesky import settings
@@ -65,7 +66,6 @@ class Simulation(object):
 
     def __call__(self):
 
-        ntraf = bs.traf.ntraf
         bs.traf.cd.setmethod("ON")
         bs.traf.cd.rpz_def = self.rpz
         bs.traf.cd.dtlookahead_def = 15
@@ -76,6 +76,7 @@ class Simulation(object):
         """ Main loop """
         t = 0
         result = []
+        start_time = time.clock()
         while bs.sim.simt <= self.sim_time:
             
             if not bs.sim.ffmode:
@@ -115,6 +116,8 @@ class Simulation(object):
             
         
         bs.sim.reset()
+        end_time = time.clock()
+        print(f"Run {self.num_sim} done in {end_time - start_time} seconds")
         return result
 
 
